@@ -41,7 +41,8 @@ public class Operation
 {
     public enum BooleanOperator
     {
-        AND((a, b) -> a & b);
+        AND((a, b) -> a & b),
+        AND_NOT((a, b) -> a & !b);
 
         private final BiFunction<Boolean, Boolean, Boolean> func;
 
@@ -96,6 +97,8 @@ public class Operation
 
                     case CONTAINS:
                     case CONTAINS_KEY:
+                    case NOT_CONTAINS:
+                    case NOT_CONTAINS_KEY:
                         isMultiExpression = true;
                         break;
                 }
@@ -153,6 +156,8 @@ public class Operation
             case EQ:
             case CONTAINS:
             case CONTAINS_KEY:
+            case NOT_CONTAINS:
+            case NOT_CONTAINS_KEY:
                 return 5;
 
             case GTE:
@@ -175,7 +180,8 @@ public class Operation
      */
     static KeyRangeIterator buildIterator(QueryController controller)
     {
-        return Node.buildTree(controller.filterOperation()).analyzeTree(controller).rangeIterator(controller);
+        Node tree = Node.buildTree(controller.filterOperation());
+        return tree.analyzeTree(controller).rangeIterator(controller);
     }
 
     /**

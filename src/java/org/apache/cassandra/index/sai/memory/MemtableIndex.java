@@ -30,18 +30,23 @@ import org.apache.cassandra.index.sai.IndexContext;
 import org.apache.cassandra.index.sai.plan.Expression;
 import org.apache.cassandra.index.sai.utils.PrimaryKeys;
 import org.apache.cassandra.index.sai.iterators.KeyRangeIterator;
+import org.apache.cassandra.index.sai.utils.TypeUtil;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 
 public class MemtableIndex
 {
     private final TrieMemoryIndex index;
+
+    private final IndexContext indexContext;
     private final LongAdder writeCount = new LongAdder();
     private final LongAdder estimatedMemoryUsed = new LongAdder();
 
     public MemtableIndex(IndexContext indexContext)
     {
         this.index = new TrieMemoryIndex(indexContext);
+        this.indexContext = indexContext;
     }
 
     public long writeCount()
@@ -71,8 +76,12 @@ public class MemtableIndex
 
     public long index(DecoratedKey key, Clustering<?> clustering, ByteBuffer value)
     {
-        if (value == null || value.remaining() == 0)
+        // we need to index empty (null) collection values, so we can properly answer
+        // NOT CONTAINS / NOT CONTAINS KEY queries
+        if (!indexContext.isCollection() && (value == null || value.remaining() == 0))
             return 0;
+        if (value == null)
+            value = ByteBufferUtil.EMPTY_BYTE_BUFFER;
 
         long ram = index.add(key, clustering, value);
         writeCount.increment();

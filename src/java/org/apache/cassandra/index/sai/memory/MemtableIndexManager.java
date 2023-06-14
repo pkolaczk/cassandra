@@ -70,7 +70,11 @@ public class MemtableIndexManager
         if (indexContext.isNonFrozenCollection())
         {
             Iterator<ByteBuffer> bufferIterator = indexContext.getValuesOf(row, FBUtilities.nowInSeconds());
-            if (bufferIterator != null)
+            if (bufferIterator == null || !bufferIterator.hasNext())
+            {
+                bytes += target.index(key, row.clustering(), null);
+            }
+            else
             {
                 while (bufferIterator.hasNext())
                 {

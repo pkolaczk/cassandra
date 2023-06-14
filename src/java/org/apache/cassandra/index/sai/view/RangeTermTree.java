@@ -53,8 +53,8 @@ public class RangeTermTree
 
     public List<SSTableIndex> search(Expression e)
     {
-        ByteBuffer minTerm = e.lower == null ? min : e.lower.value.encoded;
-        ByteBuffer maxTerm = e.upper == null ? max : e.upper.value.encoded;
+        ByteBuffer minTerm = e.getOp().isNonEquality() || e.lower == null ? min : e.lower.value.encoded;
+        ByteBuffer maxTerm = e.getOp().isNonEquality() || e.upper == null ? max : e.upper.value.encoded;
 
         return rangeTree.search(Interval.create(new Term(minTerm, comparator),
                                                 new Term(maxTerm, comparator),
@@ -77,8 +77,8 @@ public class RangeTermTree
         {
             addIndex(index);
 
-            min = min == null || TypeUtil.compare(min, index.minTerm(), comparator) > 0 ? index.minTerm() : min;
-            max = max == null || TypeUtil.compare(max, index.maxTerm(), comparator) < 0 ? index.maxTerm() : max;
+            min = min == null || index.minTerm() == null || TypeUtil.compare(min, index.minTerm(), comparator) > 0 ? index.minTerm() : min;
+            max = max == null || index.maxTerm() == null || TypeUtil.compare(max, index.maxTerm(), comparator) < 0 ? index.maxTerm() : max;
         }
 
         public void addIndex(SSTableIndex index)
@@ -122,6 +122,12 @@ public class RangeTermTree
         @Override
         public int compareTo(Term o)
         {
+            if (term == null && o.term == null)
+                return 0;
+            if (term == null)
+                return -1;
+            if (o.term == null)
+                return 1;
             return TypeUtil.compare(term, o.term, comparator);
         }
 
