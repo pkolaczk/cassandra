@@ -200,6 +200,12 @@ public abstract class Relation
             case LIKE_MATCHES:
             case LIKE:
                 return newLikeRestriction(table, boundNames, relationType);
+            case NOT_LIKE_PREFIX:
+            case NOT_LIKE_SUFFIX:
+            case NOT_LIKE_CONTAINS:
+            case NOT_LIKE_MATCHES:
+            case NOT_LIKE:
+                return newLikeRestriction(table, boundNames, relationType);
             default: throw invalidRequest("Unsupported \"!=\" relation: %s", this);
         }
     }
