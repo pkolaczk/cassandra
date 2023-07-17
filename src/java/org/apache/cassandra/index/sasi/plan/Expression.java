@@ -47,7 +47,7 @@ public class Expression
 
     public enum Op
     {
-        EQ, MATCH, PREFIX, SUFFIX, CONTAINS, NOT_EQ, RANGE, IN;
+        EQ, MATCH, PREFIX, SUFFIX, CONTAINS, NOT_PREFIX, NOT_SUFFIX, NOT_CONTAINS, NOT_EQ, RANGE, IN;
 
         public static Op valueOf(Operator operator)
         {
@@ -78,6 +78,18 @@ public class Expression
                     return CONTAINS;
 
                 case LIKE_MATCHES:
+                    return MATCH;
+
+                case NOT_LIKE_PREFIX:
+                    return NOT_PREFIX;
+
+                case NOT_LIKE_SUFFIX:
+                    return NOT_SUFFIX;
+
+                case NOT_LIKE_CONTAINS:
+                    return NOT_CONTAINS;
+
+                case NOT_LIKE_MATCHES:
                     return MATCH;
 
                 default:
@@ -148,6 +160,10 @@ public class Expression
             case LIKE_SUFFIX:
             case LIKE_CONTAINS:
             case LIKE_MATCHES:
+            case NOT_LIKE_PREFIX:
+            case NOT_LIKE_SUFFIX:
+            case NOT_LIKE_CONTAINS:
+            case NOT_LIKE_MATCHES:
             case EQ:
                 lower = new Bound(value, true);
                 upper = lower;
@@ -300,6 +316,18 @@ public class Expression
 
                 case CONTAINS:
                     isMatch = ByteBufferUtil.contains(term, requestedValue);
+                    break;
+
+                case NOT_PREFIX:
+                    isMatch = !ByteBufferUtil.startsWith(term, requestedValue);
+                    break;
+
+                case NOT_SUFFIX:
+                    isMatch = !ByteBufferUtil.endsWith(term, requestedValue);
+                    break;
+
+                case NOT_CONTAINS:
+                    isMatch = !ByteBufferUtil.contains(term, requestedValue);
                     break;
             }
 
