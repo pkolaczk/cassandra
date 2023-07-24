@@ -41,6 +41,11 @@ public interface SingleRestriction extends Restriction
         return false;
     }
 
+    public default boolean isNotLIKE()
+    {
+        return false;
+    }
+
     public default boolean isIN()
     {
         return false;

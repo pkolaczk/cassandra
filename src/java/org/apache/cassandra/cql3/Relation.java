@@ -205,7 +205,7 @@ public abstract class Relation
             case NOT_LIKE_CONTAINS:
             case NOT_LIKE_MATCHES:
             case NOT_LIKE:
-                return newLikeRestriction(table, boundNames, relationType);
+                return newNotLikeRestriction(table, boundNames, relationType);
             default: throw invalidRequest("Unsupported \"!=\" relation: %s", this);
         }
     }
@@ -281,6 +281,8 @@ public abstract class Relation
     protected abstract Restriction newIsNotRestriction(TableMetadata table, VariableSpecifications boundNames);
 
     protected abstract Restriction newLikeRestriction(TableMetadata table, VariableSpecifications boundNames, Operator operator);
+
+    protected abstract Restriction newNotLikeRestriction(TableMetadata table, VariableSpecifications boundNames, Operator operator);
 
     /**
      * Converts the specified <code>Raw</code> into a <code>Term</code>.

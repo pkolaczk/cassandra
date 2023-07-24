@@ -306,6 +306,18 @@ public final class SingleColumnRelation extends Relation
         return new SingleColumnRestriction.LikeRestriction(columnDef, operator, term);
     }
 
+    @Override
+    protected Restriction newNotLikeRestriction(TableMetadata table, VariableSpecifications boundNames, Operator operator)
+    {
+        if (mapKey != null)
+            throw invalidRequest("%s can't be used with collections.", operator());
+
+        ColumnMetadata columnDef = table.getExistingColumn(entity);
+        Term term = toTerm(toReceivers(columnDef), value, table.keyspace, boundNames);
+
+        return new SingleColumnRestriction.NotLikeRestriction(columnDef, operator, term);
+    }
+
     /**
      * Returns the receivers for this relation.
      * @param columnDef the column definition
@@ -377,6 +389,6 @@ public final class SingleColumnRelation extends Relation
 
     private boolean canHaveOnlyOneValue()
     {
-        return isEQ() || isLIKE() || (isIN() && inValues != null && inValues.size() == 1);
+        return isEQ() || isLIKE() || isNotLIKE() || (isIN() && inValues != null && inValues.size() == 1);
     }
 }
