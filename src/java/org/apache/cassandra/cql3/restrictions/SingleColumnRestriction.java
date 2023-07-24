@@ -852,4 +852,135 @@ public abstract class SingleColumnRestriction implements SingleRestriction
             return Pair.create(operator, newValue);
         }
     }
+
+    public static final class NotLikeRestriction extends SingleColumnRestriction
+    {
+        private static final ByteBuffer NOT_LIKE_WILDCARD = ByteBufferUtil.bytes("%");
+        private final Operator operator;
+        private final Term value;
+
+        public NotLikeRestriction(ColumnMetadata columnDef, Operator operator, Term value)
+        {
+            super(columnDef);
+            this.operator = operator;
+            this.value = value;
+        }
+
+        @Override
+        public void addFunctionsTo(List<Function> functions)
+        {
+            value.addFunctionsTo(functions);
+        }
+
+        @Override
+        public boolean isEQ()
+        {
+            return false;
+        }
+
+        @Override
+        public boolean isNotLIKE()
+        {
+            return true;
+        }
+
+        @Override
+        public boolean canBeConvertedToMultiColumnRestriction()
+        {
+            return false;
+        }
+
+        @Override
+        MultiColumnRestriction toMultiColumnRestriction()
+        {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void addRowFilterTo(RowFilter filter,
+                                   IndexRegistry indexRegistry,
+                                   QueryOptions options)
+        {
+            Pair<Operator, ByteBuffer> operation = makeSpecific(value.bindAndGet(options));
+
+            // there must be a suitable INDEX for NOT LIKE_XXX expressions
+            RowFilter.SimpleExpression expression = filter.add(columnDef, operation.left, operation.right);
+            indexRegistry.getBestIndexFor(expression)
+                         .orElseThrow(() -> invalidRequest("%s is only supported on properly indexed columns",
+                                                           expression));
+        }
+
+        @Override
+        public MultiCBuilder appendTo(MultiCBuilder builder, QueryOptions options)
+        {
+            // NOT LIKE can be used with clustering columns, but as it doesn't
+            // represent an actual clustering value, it can't be used in a
+            // clustering filter.
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public String toString()
+        {
+            return operator.toString();
+        }
+
+        @Override
+        public SingleRestriction doMergeWith(SingleRestriction otherRestriction)
+        {
+            throw invalidRequest("%s cannot be restricted by more than one relation if it includes a %s", columnDef.name, operator);
+        }
+
+        @Override
+        protected boolean isSupportedBy(Index index)
+        {
+            return index.supportsExpression(columnDef, operator);
+        }
+
+        /**
+         * As the specific subtype of NOT_LIKE (NOT_LIKE_PREFIX, NOT_LIKE_SUFFIX, NOT_LIKE_CONTAINS, NOT_LIKE_MATCHES) can only be
+         * determined by examining the value, which in turn can only be known after binding, all NOT_LIKE restrictions
+         * are initially created with the generic NOT_LIKE operator. This function takes the bound value, trims the
+         * wildcard '%' chars from it and returns a tuple of the inferred operator subtype and the final value
+         * @param value the bound value for the NOT_LIKE operation
+         * @return  Pair containing the inferred NOT_LIKE subtype and the value with wildcards removed
+         */
+        private static Pair<Operator, ByteBuffer> makeSpecific(ByteBuffer value)
+        {
+            Operator operator;
+            int beginIndex = value.position();
+            int endIndex = value.limit() - 1;
+            if (ByteBufferUtil.endsWith(value, NOT_LIKE_WILDCARD))
+            {
+                if (ByteBufferUtil.startsWith(value, NOT_LIKE_WILDCARD))
+                {
+                    operator = Operator.NOT_LIKE_CONTAINS;
+                    beginIndex =+ 1;
+                }
+                else
+                {
+                    operator = Operator.NOT_LIKE_PREFIX;
+                }
+            }
+            else if (ByteBufferUtil.startsWith(value, NOT_LIKE_WILDCARD))
+            {
+                operator = Operator.NOT_LIKE_SUFFIX;
+                beginIndex += 1;
+                endIndex += 1;
+            }
+            else
+            {
+                operator = Operator.NOT_LIKE_MATCHES;
+                endIndex += 1;
+            }
+
+            if (endIndex == 0 || beginIndex == endIndex)
+                throw invalidRequest("NOT LIKE value can't be empty.");
+
+            ByteBuffer newValue = value.duplicate();
+            newValue.position(beginIndex);
+            newValue.limit(endIndex);
+            return Pair.create(operator, newValue);
+        }
+    }
 }
