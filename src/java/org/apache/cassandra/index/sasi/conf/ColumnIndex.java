@@ -223,7 +223,7 @@ public class ColumnIndex
             return isLiteral();
 
         if (op == Operator.NOT_LIKE)
-            return isLiteral();
+            return false;
 
         Op operator = Op.valueOf(op);
         return !(isTokenized && operator == Op.EQ) // EQ is only applicable to non-tokenized indexes
