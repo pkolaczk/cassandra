@@ -49,8 +49,8 @@ public class OnDiskIndexBuilder
 
     public enum Mode
     {
-        PREFIX(EnumSet.of(Op.EQ, Op.MATCH, Op.PREFIX, Op.NOT_EQ, Op.RANGE, Op.NOT_PREFIX)),
-        CONTAINS(EnumSet.of(Op.EQ, Op.MATCH, Op.CONTAINS, Op.PREFIX, Op.SUFFIX, Op.NOT_EQ, Op.NOT_PREFIX, Op.NOT_SUFFIX, Op.NOT_CONTAINS)),
+        PREFIX(EnumSet.of(Op.EQ, Op.MATCH, Op.PREFIX, Op.NOT_EQ, Op.RANGE)),
+        CONTAINS(EnumSet.of(Op.EQ, Op.MATCH, Op.CONTAINS, Op.PREFIX, Op.SUFFIX, Op.NOT_EQ)),
         SPARSE(EnumSet.of(Op.EQ, Op.NOT_EQ, Op.RANGE));
 
         Set<Op> supportedOps;

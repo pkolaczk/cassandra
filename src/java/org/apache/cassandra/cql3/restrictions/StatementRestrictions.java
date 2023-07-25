@@ -190,12 +190,23 @@ public final class StatementRestrictions
 
                 this.notNullColumns.addAll(relation.toRestriction(table, boundNames).getColumnDefs());
             }
-            else if (relation.isLIKE() || relation.isNotLIKE())
+            else if (relation.isLIKE())
             {
                 Restriction restriction = relation.toRestriction(table, boundNames);
 
                 if (!type.allowUseOfSecondaryIndices() || !restriction.hasSupportingIndex(indexRegistry))
                     throw new InvalidRequestException(String.format("LIKE restriction is only supported on properly " +
+                                                                    "indexed columns. %s is not valid.",
+                                                                    relation.toString()));
+
+                addRestriction(restriction);
+            }
+            else if (relation.isNotLIKE())
+            {
+                Restriction restriction = relation.toRestriction(table, boundNames);
+
+                if (!type.allowUseOfSecondaryIndices() || !restriction.hasSupportingIndex(indexRegistry))
+                    throw new InvalidRequestException(String.format("NOT LIKE restriction is only supported on properly " +
                                                                     "indexed columns. %s is not valid.",
                                                                     relation.toString()));
 
