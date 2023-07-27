@@ -87,10 +87,9 @@ public class EmptyIndex extends SSTableIndex
                                          AbstractBounds<PartitionPosition> keyRange,
                                          QueryContext context) throws IOException
     {
-        if (expression.getOp() == Expression.IndexOperator.NOT_CONTAINS_KEY
-            || expression.getOp() == Expression.IndexOperator.NOT_CONTAINS_VALUE)
+        if (expression.getOp().isNonEquality())
         {
-            // for NOT_CONTAINS_KEY, NOT_CONTAINS_VALUE we return everything
+            // for negative searches we return everything
             // and AntiJoin + post-filtering at the top level will filter out the unnecesary keys
             return allSSTableKeys();
         }

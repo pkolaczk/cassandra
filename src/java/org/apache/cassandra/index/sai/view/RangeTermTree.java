@@ -43,10 +43,10 @@ public class RangeTermTree
     
     private final IntervalTree<Term, SSTableIndex, Interval<Term, SSTableIndex>> rangeTree;
 
-    private RangeTermTree(ByteBuffer min, ByteBuffer max, IntervalTree<Term, SSTableIndex, Interval<Term, SSTableIndex>> rangeTree, AbstractType<?> comparator)
+    private RangeTermTree(IntervalTree<Term, SSTableIndex, Interval<Term, SSTableIndex>> rangeTree, AbstractType<?> comparator)
     {
-        this.min = min;
-        this.max = max;
+        this.min = rangeTree.isEmpty() ? null : rangeTree.min().term;
+        this.max = rangeTree.isEmpty() ? null : rangeTree.max().term;
         this.rangeTree = rangeTree;
         this.comparator = comparator;
     }
@@ -64,7 +64,6 @@ public class RangeTermTree
     static class Builder
     {
         private final AbstractType<?> comparator;
-        private ByteBuffer min, max;
 
         final List<Interval<Term, SSTableIndex>> intervals = new ArrayList<>();
 
@@ -76,9 +75,6 @@ public class RangeTermTree
         public final void add(SSTableIndex index)
         {
             addIndex(index);
-
-            min = min == null || index.minTerm() == null || TypeUtil.compare(min, index.minTerm(), comparator) > 0 ? index.minTerm() : min;
-            max = max == null || index.maxTerm() == null || TypeUtil.compare(max, index.maxTerm(), comparator) < 0 ? index.maxTerm() : max;
         }
 
         public void addIndex(SSTableIndex index)
@@ -100,7 +96,7 @@ public class RangeTermTree
 
         public RangeTermTree build()
         {
-            return new RangeTermTree(min, max, IntervalTree.build(intervals), comparator);
+            return new RangeTermTree(IntervalTree.build(intervals), comparator);
         }
     }
 
