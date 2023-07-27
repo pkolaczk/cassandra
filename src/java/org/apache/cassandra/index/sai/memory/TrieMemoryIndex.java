@@ -159,10 +159,6 @@ public class TrieMemoryIndex
             case CONTAINS_KEY:
             case CONTAINS_VALUE:
                 return exactMatch(expression, keyRange);
-            case NEQ:
-            case NOT_CONTAINS_KEY:
-            case NOT_CONTAINS_VALUE:
-                return negativeMatch(expression, keyRange);
             case RANGE:
                 return rangeMatch(expression, keyRange);
             default:
@@ -363,39 +359,6 @@ public class TrieMemoryIndex
 
         return new InMemoryKeyRangeIterator(cd.minimumKey, cd.maximumKey, cd.mergedKeys);
     }
-
-    private KeyRangeIterator negativeMatch(Expression expression, AbstractBounds<PartitionPosition> keyRange)
-    {
-        assert expression.lower != null;
-
-        ByteComparable lowerBound, upperBound;
-        boolean lowerInclusive, upperInclusive;
-
-        upperBound = asComparableBytes(expression.lower.value.encoded);
-        upperInclusive = expression.lower.inclusive;
-
-        lowerBound = asComparableBytes(expression.upper.value.encoded);
-        lowerInclusive = expression.upper.inclusive;
-
-        Collector cd = new Collector(keyRange);
-
-        data.subtrie(ByteComparable.EMPTY, true, upperBound, upperInclusive)
-            .values()
-            .forEach(cd::processContent);
-        data.subtrie(lowerBound, lowerInclusive, null, true)
-            .values()
-            .forEach(cd::processContent);
-
-        if (cd.mergedKeys.isEmpty())
-        {
-            return KeyRangeIterator.empty();
-        }
-
-        cd.updateLastQueueSize();
-
-        return new InMemoryKeyRangeIterator(cd.minimumKey, cd.maximumKey, cd.mergedKeys);
-    }
-
 
     private static class PrimaryKeysReducer implements InMemoryTrie.UpsertTransformer<PrimaryKeys, PrimaryKey>
     {

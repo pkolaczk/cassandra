@@ -76,12 +76,8 @@ public class MemtableIndex
 
     public long index(DecoratedKey key, Clustering<?> clustering, ByteBuffer value)
     {
-        // we need to index empty (null) collection values, so we can properly answer
-        // NOT CONTAINS / NOT CONTAINS KEY queries
-        if (!indexContext.isCollection() && (value == null || value.remaining() == 0))
+        if (value == null || value.remaining() == 0)
             return 0;
-        if (value == null)
-            value = ByteBufferUtil.EMPTY_BYTE_BUFFER;
 
         long ram = index.add(key, clustering, value);
         writeCount.increment();
