@@ -261,10 +261,9 @@ public abstract class SSTableIndex
                           .toString();
     }
 
-    protected final List<KeyRangeIterator> allSSTableKeys() throws IOException
+    protected final List<KeyRangeIterator> allSSTableKeys(AbstractBounds<PartitionPosition> keyRange) throws IOException
     {
-        PrimaryKeyMap.Factory pkFactory = sstableContext.primaryKeyMapFactory;
-        PrimaryKeyMapIterator iterator = PrimaryKeyMapIterator.create(pkFactory);
+        PrimaryKeyMapIterator iterator = PrimaryKeyMapIterator.create(sstableContext, keyRange);
         return Collections.singletonList(iterator);
     }
 }

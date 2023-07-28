@@ -91,7 +91,7 @@ public class EmptyIndex extends SSTableIndex
         {
             // for negative searches we return everything
             // and AntiJoin + post-filtering at the top level will filter out the unnecesary keys
-            return allSSTableKeys();
+            return allSSTableKeys(keyRange);
         }
 
         return Collections.emptyList();

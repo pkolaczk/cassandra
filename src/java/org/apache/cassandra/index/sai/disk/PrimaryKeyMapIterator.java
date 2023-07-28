@@ -20,6 +20,10 @@ package org.apache.cassandra.index.sai.disk;
 
 import java.io.IOException;
 
+import org.apache.cassandra.db.PartitionPosition;
+import org.apache.cassandra.dht.AbstractBounds;
+import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.index.sai.SSTableContext;
 import org.apache.cassandra.index.sai.iterators.KeyRangeIterator;
 import org.apache.cassandra.index.sai.utils.PrimaryKey;
 
@@ -35,14 +39,27 @@ public final class PrimaryKeyMapIterator extends KeyRangeIterator
     {
         super(min, max, keys.count());
         this.keys = keys;
+        this.currentRowId = keys.rowIdFromPrimaryKey(min);
     }
 
-    public static PrimaryKeyMapIterator create(PrimaryKeyMap.Factory keyMapFactory) throws IOException
+    public static PrimaryKeyMapIterator create(SSTableContext ctx, AbstractBounds<PartitionPosition> keyRange) throws IOException
     {
-        PrimaryKeyMap keys = keyMapFactory.newPerSSTablePrimaryKeyMap();
+        PrimaryKeyMap keys = ctx.primaryKeyMapFactory.newPerSSTablePrimaryKeyMap();
         long count = keys.count();
-        PrimaryKey minKey = count > 0 ? keys.primaryKeyFromRowId(0) : null;
-        PrimaryKey maxKey = count > 0 ? keys.primaryKeyFromRowId(count - 1) : null;
+
+        PrimaryKey.Factory pkFactory = new PrimaryKey.Factory(ctx.sstable.metadata().comparator);
+        Token minToken = keyRange.left.getToken();
+        Token maxToken = keyRange.right.getToken();
+        PrimaryKey minKeyBound = pkFactory.createTokenOnly(minToken);
+        PrimaryKey maxKeyBound = pkFactory.createTokenOnly(maxToken);
+        PrimaryKey sstableMinKey = count > 0 ? keys.primaryKeyFromRowId(0) : null;
+        PrimaryKey sstableMaxKey = count > 0 ? keys.primaryKeyFromRowId(count - 1) : null;
+        PrimaryKey minKey = (sstableMinKey == null || minKeyBound.compareTo(sstableMinKey) > 0)
+                            ? minKeyBound
+                            : sstableMinKey;
+        PrimaryKey maxKey = (sstableMaxKey == null || !maxToken.isMinimum() && maxKeyBound.compareTo(sstableMaxKey) < 0)
+                            ? maxKeyBound
+                            : sstableMaxKey;
         return new PrimaryKeyMapIterator(keys, minKey, maxKey);
     }
 

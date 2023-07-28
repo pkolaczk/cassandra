@@ -169,7 +169,7 @@ public class V1SSTableIndex extends SSTableIndex
         {
             // for NOT_CONTAINS_KEY, NOT_CONTAINS_VALUE we return everything
             // and AntiJoin + post-filtering at the top level will filter out the unnecesary keys
-            return allSSTableKeys();
+            return allSSTableKeys(keyRange);
         }
 
         List<KeyRangeIterator> segmentIterators = new ArrayList<>();
