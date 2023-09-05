@@ -40,7 +40,7 @@ public class Expression
 
     public enum IndexOperator
     {
-        EQ, NEQ, RANGE, CONTAINS_KEY, CONTAINS_VALUE, NOT_CONTAINS_KEY, NOT_CONTAINS_VALUE;
+        EQ, NEQ, RANGE, CONTAINS_KEY, CONTAINS_VALUE, NOT_CONTAINS_KEY, NOT_CONTAINS_VALUE, LIKE_PREFIX, LIKE_SUFFIX, LIKE_CONTAINS, LIKE_MATCHES, NOT_LIKE_PREFIX, NOT_LIKE_SUFFIX, NOT_LIKE_CONTAINS, NOT_LIKE_MATCHES;
 
         public static IndexOperator valueOf(Operator operator)
         {
@@ -64,6 +64,30 @@ public class Expression
                 case NOT_CONTAINS_KEY:
                     return NOT_CONTAINS_KEY;
 
+                case LIKE_PREFIX:
+                    return LIKE_PREFIX;
+
+                case LIKE_SUFFIX:
+                    return LIKE_SUFFIX;
+
+                case LIKE_CONTAINS:
+                    return LIKE_CONTAINS;
+
+                case LIKE_MATCHES:
+                    return LIKE_MATCHES;
+
+                case NOT_LIKE_PREFIX:
+                    return NOT_LIKE_PREFIX;
+
+                case NOT_LIKE_SUFFIX:
+                    return NOT_LIKE_SUFFIX;
+
+                case NOT_LIKE_CONTAINS:
+                    return NOT_LIKE_CONTAINS;
+
+                case NOT_LIKE_MATCHES:
+                    return NOT_LIKE_MATCHES;
+
                 case LT:
                 case GT:
                 case LTE:
@@ -77,7 +101,7 @@ public class Expression
 
         public boolean isEquality()
         {
-            return this == EQ || this == CONTAINS_KEY || this == CONTAINS_VALUE;
+            return this == EQ || this == CONTAINS_KEY || this == CONTAINS_VALUE || this == LIKE_PREFIX || this == LIKE_SUFFIX || this == LIKE_CONTAINS || this == LIKE_MATCHES || this == NOT_LIKE_PREFIX || this == NOT_LIKE_SUFFIX || this == NOT_LIKE_CONTAINS || this == NOT_LIKE_MATCHES;
         }
 
         public boolean isEqualityOrRange()
@@ -136,6 +160,14 @@ public class Expression
             case CONTAINS_KEY:
             case NOT_CONTAINS:
             case NOT_CONTAINS_KEY:
+            case LIKE_PREFIX:
+            case LIKE_SUFFIX:
+            case LIKE_CONTAINS:
+            case LIKE_MATCHES:
+            case NOT_LIKE_PREFIX:
+            case NOT_LIKE_SUFFIX:
+            case NOT_LIKE_CONTAINS:
+            case NOT_LIKE_MATCHES:
                 lower = new Bound(value, validator, true);
                 upper = lower;
                 operator = IndexOperator.valueOf(op);

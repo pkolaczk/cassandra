@@ -264,7 +264,13 @@ public class IndexContext
             op == Operator.LIKE_CONTAINS ||
             op == Operator.LIKE_PREFIX ||
             op == Operator.LIKE_MATCHES ||
-            op == Operator.LIKE_SUFFIX) return false;
+            op == Operator.LIKE_SUFFIX) return true;
+
+        if (op == Operator.NOT_LIKE ||
+            op == Operator.NOT_LIKE_CONTAINS ||
+            op == Operator.NOT_LIKE_PREFIX ||
+            op == Operator.NOT_LIKE_MATCHES ||
+            op == Operator.NOT_LIKE_SUFFIX) return true;
 
         Expression.IndexOperator operator = Expression.IndexOperator.valueOf(op);
 

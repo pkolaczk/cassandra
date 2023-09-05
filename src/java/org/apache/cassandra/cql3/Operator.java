@@ -196,7 +196,7 @@ public enum Operator
         @Override
         public String toString()
         {
-            return "LIKE '<term>%'";
+            return "LIKE PREFIX";
         }
 
         @Override
@@ -210,7 +210,7 @@ public enum Operator
         @Override
         public String toString()
         {
-            return "LIKE '%<term>'";
+            return "LIKE SUFFIX";
         }
 
         @Override
@@ -224,7 +224,7 @@ public enum Operator
         @Override
         public String toString()
         {
-            return "LIKE '%<term>%'";
+            return "LIKE CONTAINS";
         }
 
         @Override
@@ -238,7 +238,7 @@ public enum Operator
         @Override
         public String toString()
         {
-            return "LIKE '<term>'";
+            return "LIKE MATCHES";
         }
 
         public boolean isSatisfiedBy(AbstractType<?> type, ByteBuffer leftOperand, ByteBuffer rightOperand)
@@ -307,7 +307,7 @@ public enum Operator
         @Override
         public String toString()
         {
-            return "NOT LIKE '<term>%'";
+            return "NOT LIKE PREFIX";
         }
 
         @Override
@@ -321,7 +321,7 @@ public enum Operator
         @Override
         public String toString()
         {
-            return "NOT LIKE '%<term>'";
+            return "NOT LIKE SUFFIX";
         }
 
         @Override
@@ -335,7 +335,7 @@ public enum Operator
         @Override
         public String toString()
         {
-            return "NOT LIKE '%<term>%'";
+            return "NOT LIKE CONTAINS";
         }
 
         @Override
@@ -349,9 +349,10 @@ public enum Operator
         @Override
         public String toString()
         {
-            return "NOT LIKE '<term>'";
+            return "NOT LIKE MATCHES";
         }
 
+        @Override
         public boolean isSatisfiedBy(AbstractType<?> type, ByteBuffer leftOperand, ByteBuffer rightOperand)
         {
             return !LIKE_MATCHES.isSatisfiedBy(type, leftOperand, rightOperand);

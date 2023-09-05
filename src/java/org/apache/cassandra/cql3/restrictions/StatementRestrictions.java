@@ -208,9 +208,9 @@ public final class StatementRestrictions
                 if (!type.allowUseOfSecondaryIndices() || !restriction.hasSupportingIndex(indexRegistry))
                     throw new InvalidRequestException(String.format("NOT LIKE restriction is only supported on properly " +
                                                                     "indexed columns. %s is not valid.",
-                                                                    relation.toString()));
+                                                                    relation));
 
-                addRestriction(restriction);
+                addRestriction(restriction, indexRegistry);
             }
             else
             {

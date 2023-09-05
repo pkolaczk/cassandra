@@ -158,6 +158,8 @@ public class TrieMemoryIndex
             case EQ:
             case CONTAINS_KEY:
             case CONTAINS_VALUE:
+            case NOT_LIKE_PREFIX:
+            case LIKE_PREFIX:
                 return exactMatch(expression, keyRange);
             case RANGE:
                 return rangeMatch(expression, keyRange);

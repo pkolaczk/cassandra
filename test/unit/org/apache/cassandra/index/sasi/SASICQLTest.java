@@ -244,7 +244,7 @@ public class SASICQLTest extends CQLTester
                 try
                 {
                     createTable("CREATE TABLE %s (pk int primary key, v text);");
-                    createIndex(String.format("CREATE CUSTOM INDEX ON %%s (v) USING 'org.apache.cassandra.index.sasi.SASIIndex' WITH OPTIONS = {'mode': '%s'};", mode));
+                    createIndex(String.format("CREATE CUSTOM INDEX ON %%s (v) USING 'StorageAttachedIndex'"));
 
                     execute("INSERT INTO %s (pk, v) VALUES (?, ?);", 0, "a");
                     execute("INSERT INTO %s (pk, v) VALUES (?, ?);", 1, "abc");
@@ -258,6 +258,42 @@ public class SASICQLTest extends CQLTester
                     List<Row> rs = session.execute(stmt).all();
                     Assert.assertEquals(1, rs.size());
                     Assert.assertEquals(1, rs.get(0).getInt("pk"));
+                }
+                catch (Throwable th)
+                {
+                    throw new AssertionError(String.format("Failure with mode:%s and flush:%s ", mode, forceFlush), th);
+                }
+
+            }
+        }
+    }
+
+    /**
+     * Tests query condition not_like_prefix on string columns.
+     */
+    @Test
+    public void testStringNotLikePrefix() throws Throwable
+    {
+        for (String mode : new String[]{ "PREFIX", "CONTAINS"})
+        {
+            for (boolean forceFlush : new boolean[]{ false, true })
+            {
+                try
+                {
+                    createTable("CREATE TABLE %s (pk int primary key, v text);");
+                    createIndex(String.format("CREATE CUSTOM INDEX ON %%s (v) USING 'StorageAttachedIndex'"));
+
+                    execute("INSERT INTO %s (pk, v) VALUES (?, ?);", 0, "a");
+                    execute("INSERT INTO %s (pk, v) VALUES (?, ?);", 1, "abc");
+                    execute("INSERT INTO %s (pk, v) VALUES (?, ?);", 2, "ac");
+
+                    flush(forceFlush);
+
+                    Session session = sessionNet();
+                    SimpleStatement stmt = new SimpleStatement("SELECT * FROM " + KEYSPACE + '.' + currentTable() + " WHERE v NOT LIKE 'ab%'");
+                    stmt.setFetchSize(5);
+                    List<Row> rs = session.execute(stmt).all();
+                    Assert.assertEquals(2, rs.size());
                 }
                 catch (Throwable th)
                 {

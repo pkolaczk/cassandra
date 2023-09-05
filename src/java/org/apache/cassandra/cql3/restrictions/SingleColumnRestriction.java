@@ -897,7 +897,7 @@ public abstract class SingleColumnRestriction implements SingleRestriction
         }
 
         @Override
-        public void addRowFilterTo(RowFilter filter,
+        public void addToRowFilter(RowFilter filter,
                                    IndexRegistry indexRegistry,
                                    QueryOptions options)
         {
