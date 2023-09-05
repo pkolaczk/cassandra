@@ -212,17 +212,6 @@ public final class StatementRestrictions
 
                 addRestriction(restriction, indexRegistry);
             }
-            else if (relation.isNotLIKE())
-            {
-                Restriction restriction = relation.toRestriction(table, boundNames);
-
-                if (!type.allowUseOfSecondaryIndices() || !restriction.hasSupportingIndex(indexRegistry))
-                    throw new InvalidRequestException(String.format("NOT LIKE restriction is only supported on properly " +
-                                                                    "indexed columns. %s is not valid.",
-                                                                    relation.toString()));
-
-                addRestriction(restriction);
-            }
             else
             {
                 addRestriction(relation.toRestriction(table, boundNames), indexRegistry);
