@@ -339,13 +339,11 @@ public abstract class MultiColumnRestriction implements SingleRestriction
         }
     }
 
-
     public static class SliceRestriction extends MultiColumnRestriction
     {
         private final TermSlice slice;
 
         private final List<MarkerOrList> skippedValues; // values passed in NOT IN
-
 
         SliceRestriction(List<ColumnMetadata> columnDefs, TermSlice slice, List<MarkerOrList> skippedValues)
         {
