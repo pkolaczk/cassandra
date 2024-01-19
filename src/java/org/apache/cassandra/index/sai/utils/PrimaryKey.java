@@ -326,6 +326,12 @@ public interface PrimaryKey extends Comparable<PrimaryKey>, ByteComparable
             {
                 return String.format("PrimaryKey: { token: %s, partition: %s, clustering: STATIC } ", token(), partitionKey());
             }
+
+            @Override
+            public PrimaryKey toStatic()
+            {
+                return this;
+            }
         }
 
         class WidePrimaryKey extends SkinnyPrimaryKey
@@ -393,6 +399,12 @@ public interface PrimaryKey extends Comparable<PrimaryKey>, ByteComparable
                                            .map(ByteBufferUtil::bytesToHex)
                                            .collect(Collectors.joining(", ")));
             }
+
+            @Override
+            public PrimaryKey toStatic()
+            {
+                return new StaticPrimaryKey(partitionKey);
+            }
         }
     }
 
@@ -438,4 +450,9 @@ public interface PrimaryKey extends Comparable<PrimaryKey>, ByteComparable
      * @throws UnsupportedOperationException for {@link PrimaryKey} implementations that are not byte-comparable
      */
     ByteSource asComparableBytes(ByteComparable.Version version);
+
+    default PrimaryKey toStatic()
+    {
+        throw new UnsupportedOperationException("Only STATIC and WIDE keys can be converted to STATIC");
+    }
 }

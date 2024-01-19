@@ -44,7 +44,7 @@ import org.apache.cassandra.utils.bytecomparable.ByteComparable;
  * this class not threadsafe as well.
  */
 @NotThreadSafe
-public class RowMapping
+public class RowMapping extends SSTableKeyTracker
 {
     private static final InMemoryTrie.UpsertTransformer<Long, Long> OVERWRITE_TRANSFORMER = (existing, update) -> update;
 
@@ -72,7 +72,7 @@ public class RowMapping
         }
 
         @Override
-        public int size()
+        public int getCount()
         {
             return 0;
         }
@@ -81,13 +81,6 @@ public class RowMapping
     private final InMemoryTrie<Long> rowMapping = new InMemoryTrie<>(BufferType.OFF_HEAP);
 
     private boolean complete = false;
-
-    public PrimaryKey minKey;
-    public PrimaryKey maxKey;
-
-    public long maxSSTableRowId = -1;
-
-    public int count;
 
     private RowMapping()
     {}
@@ -173,29 +166,21 @@ public class RowMapping
 
         maxSSTableRowId = Math.max(maxSSTableRowId, sstableRowId);
 
-        // data is written in token sorted order
-        if (minKey == null)
-            minKey = key;
-        maxKey = key;
+        updateMinMaxKeys(key);
         count++;
     }
 
     /**
-     * Returns the SSTable row Id for a {@link PrimaryKey}
+     * Returns the SSTable row ID for a {@link PrimaryKey}
      *
      * @param key the {@link PrimaryKey}
-     * @return a valid SSTable row Id for the {@link PrimaryKey} or -1 if the {@link PrimaryKey} doesn't exist
+     * @return a valid SSTable row ID for the {@link PrimaryKey} or -1 if the {@link PrimaryKey} doesn't exist
      * in the {@link RowMapping}
      */
     public int get(PrimaryKey key)
     {
         Long sstableRowId = rowMapping.get(key);
         return sstableRowId == null ? -1 : Math.toIntExact(sstableRowId);
-    }
-
-    public int size()
-    {
-        return count;
     }
 
     public boolean hasRows()

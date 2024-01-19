@@ -27,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.index.sai.StorageAttachedIndex;
+import org.apache.cassandra.index.sai.disk.SSTableKeyTracker;
 import org.apache.cassandra.index.sai.disk.format.IndexDescriptor;
 import org.apache.cassandra.index.sai.disk.v1.bbtree.NumericIndexWriter;
 import org.apache.cassandra.index.sai.disk.v1.trie.LiteralIndexWriter;
@@ -38,7 +39,7 @@ import org.apache.cassandra.index.sai.utils.PrimaryKey;
  * Creates an on-heap index data structure to be flushed to an SSTable index.
  */
 @NotThreadSafe
-public abstract class SegmentBuilder
+public abstract class SegmentBuilder extends SSTableKeyTracker
 {
     private static final Logger logger = LoggerFactory.getLogger(SegmentBuilder.class);
 
@@ -57,19 +58,14 @@ public abstract class SegmentBuilder
     private boolean active = true;
     // segment metadata
     private long minSSTableRowId = -1;
-    private long maxSSTableRowId = -1;
     private long segmentRowIdOffset = 0;
 
-    // in token order
-    private PrimaryKey minKey;
-    private PrimaryKey maxKey;
     // in termComparator order
     private ByteBuffer minTerm;
     private ByteBuffer maxTerm;
 
     final StorageAttachedIndex index;
     long totalBytesAllocated;
-    int rowCount = 0;
     int maxSegmentRowId = -1;
 
     public static class TrieSegmentBuilder extends SegmentBuilder
@@ -154,15 +150,21 @@ public abstract class SegmentBuilder
         assert !flushed : "Cannot flush an already flushed segment";
         flushed = true;
 
-        if (getRowCount() == 0)
+        if (getCount() == 0)
         {
             logger.warn(index.identifier().logMessage("No rows to index during flush of SSTable {}."), indexDescriptor.sstableDescriptor);
             return null;
         }
 
         SegmentMetadata.ComponentMetadataMap indexMetas = flushInternal(indexDescriptor);
+        PrimaryKey segmentMinKey = index.termType().columnMetadata().isStatic() ? minStaticKey : minKey;
+        PrimaryKey segmentMaxKey = index.termType().columnMetadata().isStatic() ? maxStaticKey : maxKey;
 
-        return new SegmentMetadata(segmentRowIdOffset, rowCount, minSSTableRowId, maxSSTableRowId, minKey, maxKey, minTerm, maxTerm, indexMetas);
+        return new SegmentMetadata(segmentRowIdOffset, count,
+                                   minSSTableRowId, maxSSTableRowId,
+                                   segmentMinKey, segmentMaxKey,
+                                   minTerm, maxTerm,
+                                   indexMetas);
     }
 
     public long add(ByteBuffer term, PrimaryKey key, long sstableRowId)
@@ -173,20 +175,17 @@ public abstract class SegmentBuilder
         maxSSTableRowId = sstableRowId;
 
         assert maxKey == null || maxKey.compareTo(key) <= 0;
-        if (minKey == null)
-            minKey = key;
-        maxKey = key;
+
+        updateMinMaxKeys(key);
 
         minTerm = index.termType().min(term, minTerm);
         maxTerm = index.termType().max(term, maxTerm);
 
-        if (rowCount == 0)
-        {
+        if (count == 0)
             // use first global rowId in the segment as segment rowId offset
             segmentRowIdOffset = sstableRowId;
-        }
 
-        rowCount++;
+        count++;
 
         // segmentRowIdOffset should encode sstableRowId into Integer
         int segmentRowId = castToSegmentRowId(sstableRowId, segmentRowIdOffset);
@@ -247,17 +246,12 @@ public abstract class SegmentBuilder
 
     protected abstract SegmentMetadata.ComponentMetadataMap flushInternal(IndexDescriptor indexDescriptor) throws IOException;
 
-    public int getRowCount()
-    {
-        return rowCount;
-    }
-
     /**
      * @return true if next SSTable row ID exceeds max segment row ID
      */
     public boolean exceedsSegmentLimit(long ssTableRowId)
     {
-        if (getRowCount() == 0)
+        if (getCount() == 0)
             return false;
 
         // To handle the case where there are many non-indexable rows. eg. rowId-1 and rowId-3B are indexable,

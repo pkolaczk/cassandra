@@ -77,7 +77,19 @@ public class KeyRangeIntersectionIterator extends KeyRangeIterator
                 if (index != alreadyAvanced)
                 {
                     KeyRangeIterator range = ranges.get(index);
-                    PrimaryKey nextKey = nextOrNull(range, highestKey);
+                    PrimaryKey nextKey = range.getCurrent();
+
+                    // Note that we will either have a data model that produces SKINNY primary keys or a data model
+                    // that produces some combination of WIDE and STATIC prikary keys.
+                    if (nextKey.kind() == PrimaryKey.Kind.WIDE || nextKey.kind() == highestKey.kind())
+                        // We can always skip if the target is of the same kind or this range is non-static. 
+                        nextKey = nextOrNull(range, highestKey);
+                    else if (nextKey.kind() == PrimaryKey.Kind.STATIC && nextKey.compareTo(highestKey) < 0)
+                        // For a range of static keys, only skip if we'e advanced to a new partition, and when we
+                        // do, skip to an actual static key. We may otherwise skip too far, as static row IDs always
+                        // precede non-static ones in on-disk postings lists.
+                        nextKey = nextOrNull(range, highestKey.toStatic());
+
                     if (nextKey == null || nextKey.compareTo(highestKey) > 0)
                     {
                         // We jumped over the highest key seen so far, so make it the new highest key.

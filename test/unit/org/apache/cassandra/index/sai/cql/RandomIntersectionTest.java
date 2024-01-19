@@ -26,6 +26,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.junit.Before;
@@ -33,12 +34,15 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.index.sai.utils.SAIRandomizedTester;
 
 @RunWith(Parameterized.class)
 public class RandomIntersectionTest extends SAIRandomizedTester
 {
     private static final Object[][] EMPTY_ROWS = new Object[][]{};
+
+    enum Mode { REGULAR, STATIC, MIXED }
 
     @Parameterized.Parameter
     public String testName;
@@ -55,23 +59,29 @@ public class RandomIntersectionTest extends SAIRandomizedTester
     @Parameterized.Parameter(4)
     public boolean v2Cardinality;
 
+    @Parameterized.Parameter(5)
+    public Mode mode;
+
     @Parameterized.Parameters(name = "{0}")
     public static List<Object[]> parameters()
     {
         List<Object[]> parameters = new LinkedList<>();
 
-        parameters.add(new Object[]{ "Large partition restricted high high", true, true, true, true });
-        parameters.add(new Object[]{ "Large partition restricted low low", true, true, false, false });
-        parameters.add(new Object[]{ "Large partition restricted high low", true, true, true, false });
-        parameters.add(new Object[]{ "Large partition unrestricted high high", false, true, true, true });
-        parameters.add(new Object[]{ "Large partition unrestricted low low", false, true, false, false });
-        parameters.add(new Object[]{ "Large partition unrestricted high low", false, true, true, false });
-        parameters.add(new Object[]{ "Small partition restricted high high", true, false, true, true });
-        parameters.add(new Object[]{ "Small partition restricted low low", true, false, false, false });
-        parameters.add(new Object[]{ "Small partition restricted high low", true, false, true, false });
-        parameters.add(new Object[]{ "Small partition unrestricted high high", false, false, true, true });
-        parameters.add(new Object[]{ "Small partition unrestricted low low", false, false, false, false });
-        parameters.add(new Object[]{ "Small partition unrestricted high low", false, false, true, false });
+        for (Mode mode : Mode.values())
+        {
+            parameters.add(new Object[] { "Large partition restricted, high, high, " + mode, true, true, true, true, mode });
+            parameters.add(new Object[] { "Large partition restricted, low, low, " + mode, true, true, false, false, mode });
+            parameters.add(new Object[] { "Large partition restricted, high, low, " + mode, true, true, true, false, mode });
+            parameters.add(new Object[] { "Large partition unrestricted, high, high, " + mode, false, true, true, true, mode });
+            parameters.add(new Object[] { "Large partition unrestricted, low, low, " + mode, false, true, false, false, mode });
+            parameters.add(new Object[] { "Large partition unrestricted, high, low, " + mode, false, true, true, false, mode });
+            parameters.add(new Object[] { "Small partition restricted, high, high, " + mode, true, false, true, true, mode });
+            parameters.add(new Object[] { "Small partition restricted, low, low, " + mode, true, false, false, false, mode });
+            parameters.add(new Object[] { "Small partition restricted, high, low, " + mode, true, false, true, false, mode });
+            parameters.add(new Object[] { "Small partition unrestricted, high, high, " + mode, false, false, true, true, mode });
+            parameters.add(new Object[] { "Small partition unrestricted, low, low, " + mode, false, false, false, false, mode });
+            parameters.add(new Object[] { "Small partition unrestricted, high, low, " + mode, false, false, true, false, mode });
+        }
 
         return parameters;
     }
@@ -81,9 +91,11 @@ public class RandomIntersectionTest extends SAIRandomizedTester
     @Before
     public void createTableAndIndexes()
     {
-        createTable("CREATE TABLE %s (pk int, ck int, v1 int, v2 int, PRIMARY KEY(pk, ck))");
+        createTable("CREATE TABLE %s (pk int, ck int, v1 int, v2 int, s1 int static, s2 int static, PRIMARY KEY(pk, ck))");
         createIndex("CREATE INDEX ON %s(v1) USING 'sai'");
         createIndex("CREATE INDEX ON %s(v2) USING 'sai'");
+        createIndex("CREATE INDEX ON %s(s1) USING 'sai'");
+        createIndex("CREATE INDEX ON %s(s2) USING 'sai'");
 
         numRows = nextInt(50000, 200000);
     }
@@ -108,14 +120,34 @@ public class RandomIntersectionTest extends SAIRandomizedTester
                 int v1 = nextV1();
                 int v2 = nextV2();
 
+                Predicate<TestRow> predicate = null;
+
+                if (mode == Mode.REGULAR)
+                    predicate = row -> row.v1 > v1 && row.v2 > v2;
+                else if (mode == Mode.STATIC)
+                    predicate = row -> row.s1 > v1 && row.s2 > v2;
+                else if (mode == Mode.MIXED)
+                    predicate = row -> row.v1 > v1 && row.s2 > v2;
+
+                assert predicate != null : "Predicate should be assigned!";
+
                 List<Object[]> expected = testRowMap.get(pk)
                                                     .stream()
                                                     .sorted(Comparator.comparingInt(o -> o.ck))
-                                                    .filter(row -> row.v1 > v1 && row.v2 > v2)
-                                                    .map(row -> row(row.ck))
+                                                    .filter(predicate)
+                                                    .map(row -> row(row.pk, row.ck))
                                                     .collect(Collectors.toList());
 
-                assertRows(execute("SELECT ck FROM %s WHERE pk = ? AND v1 > ? AND v2 > ?", pk, v1, v2), expected.toArray(EMPTY_ROWS));
+                UntypedResultSet result = null;
+
+                if (mode == Mode.REGULAR)
+                    result = execute("SELECT pk, ck FROM %s WHERE pk = ? AND v1 > ? AND v2 > ?", pk, v1, v2);
+                else if (mode == Mode.STATIC)
+                    result = execute("SELECT pk, ck FROM %s WHERE pk = ? AND s1 > ? AND s2 > ?", pk, v1, v2);
+                else if (mode == Mode.MIXED)
+                    result = execute("SELECT pk, ck FROM %s WHERE pk = ? AND v1 > ? AND s2 > ?", pk, v1, v2);
+
+                assertRows(result, expected.toArray(EMPTY_ROWS));
             }
         });
     }
@@ -130,14 +162,34 @@ public class RandomIntersectionTest extends SAIRandomizedTester
                 int v1 = nextV1();
                 int v2 = nextV2();
 
+                Predicate<TestRow> predicate = null;
+                
+                if (mode == Mode.REGULAR)
+                    predicate = row -> row.v1 == v1 && row.v2 == v2;
+                else if (mode == Mode.STATIC)
+                    predicate = row -> row.s1 == v1 && row.s2 == v2;
+                else if (mode == Mode.MIXED)
+                    predicate = row -> row.v1 == v1 && row.s2 == v2;
+                
+                assert predicate != null : "Predicate should be assigned!";
+                
                 List<Object[]> expected = testRowMap.values()
                                                     .stream()
                                                     .flatMap(Collection::stream)
-                                                    .filter(row -> row.v1 == v1 && row.v2 == v2)
-                                                    .map(row -> row(row.ck))
+                                                    .filter(predicate)
+                                                    .map(row -> row(row.pk, row.ck))
                                                     .collect(Collectors.toList());
 
-                assertRowsIgnoringOrder(execute("SELECT ck FROM %s WHERE v1 = ? AND v2 = ?", v1, v2), expected.toArray(EMPTY_ROWS));
+                UntypedResultSet result = null;
+                
+                if (mode == Mode.REGULAR)
+                    result = execute("SELECT pk, ck FROM %s WHERE v1 = ? AND v2 = ?", v1, v2);
+                else if (mode == Mode.STATIC)
+                    result = execute("SELECT pk, ck FROM %s WHERE s1 = ? AND s2 = ?", v1, v2);
+                else if (mode == Mode.MIXED)
+                    result = execute("SELECT pk, ck FROM %s WHERE v1 = ? AND s2 = ?", v1, v2);
+
+                assertRowsIgnoringOrder(result, expected.toArray(EMPTY_ROWS));
             }
         });
     }
@@ -148,17 +200,21 @@ public class RandomIntersectionTest extends SAIRandomizedTester
 
         int clusterSize = largePartition ? nextInt(500, 5000) : nextInt(10, 100);
         int partition = nextInt(0, numRows);
+        int s1 = nextV1();
+        int s2 = nextV2();
         List<TestRow> rowList = new ArrayList<>(clusterSize);
         testRowMap.put(partition, rowList);
         int clusterCount = 0;
+
         for (int index = 0; index < numRows; index++)
         {
-            TestRow row = new TestRow(partition, nextInt(10, numRows), nextV1(), nextV2());
+            TestRow row = new TestRow(partition, nextInt(10, numRows), nextV1(), nextV2(), s1, s2);
             while (rowList.contains(row))
-                row = new TestRow(partition, nextInt(10, numRows), nextV1(), nextV2());
+                row = new TestRow(partition, nextInt(10, numRows), nextV1(), nextV2(), s1, s2);
 
             rowList.add(row);
             clusterCount++;
+
             if (clusterCount == clusterSize)
             {
                 clusterCount = 0;
@@ -170,8 +226,12 @@ public class RandomIntersectionTest extends SAIRandomizedTester
                 testRowMap.put(partition, rowList);
             }
         }
-        testRowMap.values().stream().flatMap(Collection::stream).forEach(row -> execute("INSERT INTO %s (pk, ck, v1, v2) VALUES (?, ?, ?, ?)",
-                                                                                        row.pk, row.ck, row.v1, row.v2));
+       
+        testRowMap.values().stream().flatMap(Collection::stream).forEach(row -> {
+            execute("INSERT INTO %s (pk, ck, v1, v2) VALUES (?, ?, ?, ?)", row.pk, row.ck, row.v1, row.v2);
+            execute("INSERT INTO %s (pk, s1, s2) VALUES (?, ?, ?)", row.pk, row.s1, row.s2);
+        });
+
         return testRowMap;
     }
 
@@ -191,13 +251,17 @@ public class RandomIntersectionTest extends SAIRandomizedTester
         final int ck;
         final int v1;
         final int v2;
+        final int s1;
+        final int s2;
 
-        TestRow(int pk, int ck, int v1, int v2)
+        TestRow(int pk, int ck, int v1, int v2, int s1, int s2)
         {
             this.pk = pk;
             this.ck = ck;
             this.v1 = v1;
             this.v2 = v2;
+            this.s1 = s1;
+            this.s2 = s2;
         }
 
         @Override

@@ -236,7 +236,7 @@ public class SSTableIndexWriter implements PerColumnIndexWriter
                          FBUtilities.prettyPrintMemory(limiter.limitBytes()),
                          FBUtilities.prettyPrintMemory(currentBuilder.getMinimumFlushBytes()),
                          FBUtilities.prettyPrintMemory(currentBuilder.totalBytesAllocated()),
-                         currentBuilder.getRowCount(),
+                         currentBuilder.getCount(),
                          FBUtilities.prettyPrintMemory(limiter.currentBytesUsed()));
         }
 
