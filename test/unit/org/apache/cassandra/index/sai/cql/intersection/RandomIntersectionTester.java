@@ -16,13 +16,12 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.index.sai.cql;
+package org.apache.cassandra.index.sai.cql.intersection;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -30,19 +29,16 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.index.sai.utils.SAIRandomizedTester;
 
-@RunWith(Parameterized.class)
-public class RandomIntersectionTest extends SAIRandomizedTester
+public abstract class RandomIntersectionTester extends SAIRandomizedTester
 {
     private static final Object[][] EMPTY_ROWS = new Object[][]{};
 
-    enum Mode { REGULAR, STATIC, MIXED }
+    protected enum Mode { REGULAR, STATIC, MIXED }
 
     @Parameterized.Parameter
     public String testName;
@@ -62,30 +58,6 @@ public class RandomIntersectionTest extends SAIRandomizedTester
     @Parameterized.Parameter(5)
     public Mode mode;
 
-    @Parameterized.Parameters(name = "{0}")
-    public static List<Object[]> parameters()
-    {
-        List<Object[]> parameters = new LinkedList<>();
-
-        for (Mode mode : Mode.values())
-        {
-            parameters.add(new Object[] { "Large partition restricted, high, high, " + mode, true, true, true, true, mode });
-            parameters.add(new Object[] { "Large partition restricted, low, low, " + mode, true, true, false, false, mode });
-            parameters.add(new Object[] { "Large partition restricted, high, low, " + mode, true, true, true, false, mode });
-            parameters.add(new Object[] { "Large partition unrestricted, high, high, " + mode, false, true, true, true, mode });
-            parameters.add(new Object[] { "Large partition unrestricted, low, low, " + mode, false, true, false, false, mode });
-            parameters.add(new Object[] { "Large partition unrestricted, high, low, " + mode, false, true, true, false, mode });
-            parameters.add(new Object[] { "Small partition restricted, high, high, " + mode, true, false, true, true, mode });
-            parameters.add(new Object[] { "Small partition restricted, low, low, " + mode, true, false, false, false, mode });
-            parameters.add(new Object[] { "Small partition restricted, high, low, " + mode, true, false, true, false, mode });
-            parameters.add(new Object[] { "Small partition unrestricted, high, high, " + mode, false, false, true, true, mode });
-            parameters.add(new Object[] { "Small partition unrestricted, low, low, " + mode, false, false, false, false, mode });
-            parameters.add(new Object[] { "Small partition unrestricted, high, low, " + mode, false, false, true, false, mode });
-        }
-
-        return parameters;
-    }
-
     private int numRows;
 
     @Before
@@ -100,16 +72,7 @@ public class RandomIntersectionTest extends SAIRandomizedTester
         numRows = nextInt(50000, 200000);
     }
 
-    @Test
-    public void randomIntersectionTest() throws Throwable
-    {
-        if (partitionRestricted)
-            runRestrictedQueries();
-        else
-            runUnrestrictedQueries();
-    }
-
-    private void runRestrictedQueries() throws Throwable
+    protected void runRestrictedQueries() throws Throwable
     {
         Map<Integer, List<TestRow>> testRowMap = buildAndLoadTestRows();
 
@@ -152,7 +115,7 @@ public class RandomIntersectionTest extends SAIRandomizedTester
         });
     }
 
-    private void runUnrestrictedQueries() throws Throwable
+    protected void runUnrestrictedQueries() throws Throwable
     {
         Map<Integer, List<TestRow>> testRowMap = buildAndLoadTestRows();
 
