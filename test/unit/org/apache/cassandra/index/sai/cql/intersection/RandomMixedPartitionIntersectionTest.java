@@ -25,7 +25,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import static org.apache.cassandra.index.sai.cql.intersection.RandomIntersectionTester.Mode.MIXED;
+import static org.apache.cassandra.index.sai.cql.intersection.RandomIntersectionTester.Mode.REGULAR_STATIC;
 
 @RunWith(Parameterized.class)
 public class RandomMixedPartitionIntersectionTest extends RandomIntersectionTester
@@ -35,12 +35,12 @@ public class RandomMixedPartitionIntersectionTest extends RandomIntersectionTest
     {
         List<Object[]> parameters = new LinkedList<>();
 
-        parameters.add(new Object[] { "Large partition restricted, high, high", true, true, true, true, MIXED });
-        parameters.add(new Object[] { "Large partition restricted, low, low", true, true, false, false, MIXED });
-        parameters.add(new Object[] { "Large partition restricted, high, low", true, true, true, false, MIXED });
-        parameters.add(new Object[] { "Small partition restricted, high, high", true, false, true, true, MIXED });
-        parameters.add(new Object[] { "Small partition restricted, low, low", true, false, false, false, MIXED });
-        parameters.add(new Object[] { "Small partition restricted, high, low", true, false, true, false, MIXED });
+        parameters.add(new Object[] { "Large partition restricted, high, high", true, true, true, true, REGULAR_STATIC});
+        parameters.add(new Object[] { "Large partition restricted, low, low", true, true, false, false, REGULAR_STATIC});
+        parameters.add(new Object[] { "Large partition restricted, high, low", true, true, true, false, REGULAR_STATIC});
+        parameters.add(new Object[] { "Small partition restricted, high, high", true, false, true, true, REGULAR_STATIC});
+        parameters.add(new Object[] { "Small partition restricted, low, low", true, false, false, false, REGULAR_STATIC});
+        parameters.add(new Object[] { "Small partition restricted, high, low", true, false, true, false, REGULAR_STATIC});
 
         return parameters;
     }

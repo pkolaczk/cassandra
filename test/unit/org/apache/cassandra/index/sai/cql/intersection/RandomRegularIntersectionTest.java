@@ -48,6 +48,6 @@ public class RandomRegularIntersectionTest extends RandomIntersectionTester
     @Test
     public void testRegularIntersection() throws Throwable
     {
-        runUnrestrictedQueries();            
+        runUnrestrictedQueries();
     }
 }

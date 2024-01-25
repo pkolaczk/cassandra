@@ -28,13 +28,17 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.CassandraRelevantProperties;
 import org.apache.cassandra.index.sai.utils.PrimaryKey;
+import org.apache.cassandra.index.sai.utils.PrimaryKey.Kind;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.tracing.Tracing;
 
 /**
  * A simple intersection iterator that makes no real attempts at optimising the iteration apart from
- * initially sorting the ranges. This implementation also supports an intersection limit which limits
- * the number of ranges that will be included in the intersection. This currently defaults to 2.
+ * initially sorting the ranges. This implementation also supports an intersection limit via
+ * {@code CassandraRelevantProperties.SAI_INTERSECTION_CLAUSE_LIMIT} which limits the number of ranges that will 
+ * be included in the intersection.
+ * <p> 
+ * Intersection only works for ranges that are compatible according to {@link PrimaryKey.Kind#isIntersectable(Kind)}.
  */
 public class KeyRangeIntersectionIterator extends KeyRangeIterator
 {
@@ -81,16 +85,19 @@ public class KeyRangeIntersectionIterator extends KeyRangeIterator
 
                     // Note that we will either have a data model that produces SKINNY primary keys or a data model
                     // that produces some combination of WIDE and STATIC prikary keys.
-                    if (nextKey.kind() == PrimaryKey.Kind.WIDE || nextKey.kind() == highestKey.kind())
+                    if (nextKey.kind() == Kind.WIDE || nextKey.kind() == highestKey.kind())
                         // We can always skip if the target is of the same kind or this range is non-static. 
                         nextKey = nextOrNull(range, highestKey);
-                    else if (nextKey.kind() == PrimaryKey.Kind.STATIC && nextKey.compareTo(highestKey) < 0)
+                    else if (nextKey.kind() == Kind.STATIC && nextKey.compareTo(highestKey) < 0)
                         // For a range of static keys, only skip if we'e advanced to a new partition, and when we
                         // do, skip to an actual static key. We may otherwise skip too far, as static row IDs always
                         // precede non-static ones in on-disk postings lists.
                         nextKey = nextOrNull(range, highestKey.toStatic());
 
-                    if (nextKey == null || nextKey.compareTo(highestKey) > 0)
+                    // We use strict comparison here, since it orders WIDE primary keys after STATIC primary keys
+                    // in the same partition. When WIDE keys are present, we want to return them rather than STATIC
+                    // keys to avoid retrieving and post-filtering entire partitions.
+                    if (nextKey == null || nextKey.compareToStrict(highestKey) > 0)
                     {
                         // We jumped over the highest key seen so far, so make it the new highest key.
                         highestKey = nextKey;
@@ -102,9 +109,9 @@ public class KeyRangeIntersectionIterator extends KeyRangeIterator
                         // the other iterators except this one to match the new highest key.
                         continue outer;
                     }
-                    assert nextKey.compareTo(highestKey) == 0:
-                    String.format("skipped to an item smaller than the target; " +
-                                  "iterator: %s, target key: %s, returned key: %s", range, highestKey, nextKey);
+                    assert nextKey.compareTo(highestKey) == 0 :
+                        String.format("skipped to an item smaller than the target; " +
+                                      "iterator: %s, target key: %s, returned key: %s", range, highestKey, nextKey);
                 }
             }
             // If we reached here, next() has been called at least once on each range iterator and
@@ -248,6 +255,20 @@ public class KeyRangeIntersectionIterator extends KeyRangeIterator
             if (ranges.size() == 1)
                 return ranges.get(0);
 
+            // Make sure intersection is supported on the ranges provided:
+            PrimaryKey.Kind firstKind = null;
+            
+            for (KeyRangeIterator range : ranges)
+            {
+                PrimaryKey key = range.getCurrent();
+
+                if (key != null)
+                    if (firstKind == null)
+                        firstKind = key.kind();
+                    else if (!firstKind.isIntersectable(key.kind()))
+                        throw new IllegalArgumentException("Cannot intersect " + firstKind + " and " + key.kind() + " ranges!");
+            }
+
             return new KeyRangeIntersectionIterator(statistics, ranges);
         }
 
@@ -289,18 +310,18 @@ public class KeyRangeIntersectionIterator extends KeyRangeIterator
 
     /**
      * Ranges are overlapping the following cases:
-     *
+     * <p>
      *   * When they have a common subrange:
-     *
+     * <p>
      *   min       b.current      max          b.max
      *   +---------|--------------+------------|
-     *
+     * <p>
      *   b.current      min       max          b.max
      *   |--------------+---------+------------|
-     *
+     * <p>
      *   min        b.current     b.max        max
      *   +----------|-------------|------------+
-     *
+     * <p>
      *
      *  If either range is empty, they're disjoint.
      */
