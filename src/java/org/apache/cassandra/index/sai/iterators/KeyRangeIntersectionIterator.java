@@ -32,6 +32,8 @@ import org.apache.cassandra.index.sai.utils.PrimaryKey.Kind;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.tracing.Tracing;
 
+import javax.annotation.Nullable;
+
 /**
  * A simple intersection iterator that makes no real attempts at optimising the iteration apart from
  * initially sorting the ranges. This implementation also supports an intersection limit via
@@ -60,39 +62,34 @@ public class KeyRangeIntersectionIterator extends KeyRangeIterator
     @Override
     protected PrimaryKey computeNext()
     {
-        // Range iterator that has been advanced in the previous cycle of the outer loop.
-        // Initially there hasn't been the previous cycle, so set to null.
-        int alreadyAvanced = -1;
-
-        // The highest primary key seen on any range iterator so far.
+        // Advance one iterator to the next key and remember the key as the highest seen so far.
         // It can become null when we reach the end of the iterator.
-        PrimaryKey highestKey = getCurrent();
+        // If there are both static and non-static columns being iterated here, we bump up the non-static one,
+        // regardless of the order of ranges on the ranges list.
+        PrimaryKey highestKey = advanceOneRange();
 
         outer:
-        // We need to check if highestKey exceeds the maximum because the maximum is
-        // the lowest value maximum of all the ranges. As a result any value could
-        // potentially exceed it.
+        // Now when we bumped up one iterator, we must try to advance all the other iterators that got behind,
+        // so they catch up to it. Note that we will not advance the iterators for static columns
+        // as long as they point to the partition of the highestKey
+        // (this is because a static primary key compares to other keys only by partition).
+        // This loop continues until all iterators point to the same key,
+        // or if we run out of keys on any of them, or if we exceed the maximum key.
+        // There is no point in iterating after maximum, because all keys are never going to match beyond that point.
         while (highestKey != null && highestKey.compareTo(getMaximum()) <= 0)
         {
             // Try advance all iterators to the highest key seen so far.
             // Once this inner loop finishes normally, all iterators are guaranteed to be at the same value.
-            for (int index = 0; index < ranges.size(); index++)
+            for (KeyRangeIterator range : ranges)
             {
-                if (index != alreadyAvanced)
+                if (range.getCurrent().compareTo(highestKey) < 0)
                 {
-                    KeyRangeIterator range = ranges.get(index);
-                    PrimaryKey nextKey = range.getCurrent();
-
-                    // Note that we will either have a data model that produces SKINNY primary keys or a data model
-                    // that produces some combination of WIDE and STATIC prikary keys.
-                    if (nextKey.kind() == Kind.WIDE || nextKey.kind() == highestKey.kind())
-                        // We can always skip if the target is of the same kind or this range is non-static. 
-                        nextKey = nextOrNull(range, highestKey);
-                    else if (nextKey.kind() == Kind.STATIC && nextKey.compareTo(highestKey) < 0)
-                        // For a range of static keys, only skip if we'e advanced to a new partition, and when we
-                        // do, skip to an actual static key. We may otherwise skip too far, as static row IDs always
-                        // precede non-static ones in on-disk postings lists.
-                        nextKey = nextOrNull(range, highestKey.toStatic());
+                    // If we advance a STATIC key, then we must advance it to the same partition as the highestKey.
+                    // Advancing a STATIC key to a WIDE key directly (without throwing away the clustering) would
+                    // go too far, as WIDE keys are stored after STATIC in the posting list.
+                    PrimaryKey nextKey = range.getCurrent().kind() == Kind.STATIC
+                            ?   nextOrNull(range, highestKey.toStatic())
+                            :   nextOrNull(range, highestKey);
 
                     // We use strict comparison here, since it orders WIDE primary keys after STATIC primary keys
                     // in the same partition. When WIDE keys are present, we want to return them rather than STATIC
@@ -101,12 +98,9 @@ public class KeyRangeIntersectionIterator extends KeyRangeIterator
                     {
                         // We jumped over the highest key seen so far, so make it the new highest key.
                         highestKey = nextKey;
-                        // Remember this iterator to avoid advancing it again, because it is already at the highest key
-                        alreadyAvanced = index;
-                        // This iterator jumped over, so the other iterators are lagging behind now,
+                        // This iterator jumped over, so the other iterators might be lagging behind now,
                         // including the ones already advanced in the earlier cycles of the inner loop.
-                        // Therefore, restart the inner loop in order to advance
-                        // the other iterators except this one to match the new highest key.
+                        // Therefore, restart the inner loop in order to advance the lagging iterators.
                         continue outer;
                     }
                     assert nextKey.compareTo(highestKey) == 0 :
@@ -114,12 +108,40 @@ public class KeyRangeIntersectionIterator extends KeyRangeIterator
                                       "iterator: %s, target key: %s, returned key: %s", range, highestKey, nextKey);
                 }
             }
+
             // If we reached here, next() has been called at least once on each range iterator and
             // the last call to next() on each iterator returned a value equal to the highestKey.
             return highestKey;
         }
         return endOfData();
     }
+
+    /**
+     * Advances the iterator of one range to the next item.
+     * This becomes the highest seen so far.
+     * Iterators pointing to STATIC keys are advanced only if no non-STATIC keys have been advanced.
+     *
+     * @return the current highest key or null if the iterator has reached the end
+     */
+    private @Nullable PrimaryKey advanceOneRange()
+    {
+        PrimaryKey highestKey = getCurrent();
+        for (KeyRangeIterator range : ranges)
+        {
+            if (range.getCurrent().kind() != Kind.STATIC)
+                return nextOrNull(range, highestKey);
+
+        }
+        for (KeyRangeIterator range : ranges)
+        {
+            if (range.getCurrent().kind() == Kind.STATIC)
+                return nextOrNull(range, highestKey);
+        }
+
+        assert ranges.isEmpty();
+        return null;
+    }
+
 
     @Override
     protected void performSkipTo(PrimaryKey nextKey)
