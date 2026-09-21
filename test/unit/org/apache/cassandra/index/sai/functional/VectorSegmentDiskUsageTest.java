@@ -23,9 +23,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.junit.After;
 import org.junit.Test;
+import org.junit.runners.Parameterized;
 
 import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.index.sai.IndexContext;
@@ -48,19 +50,42 @@ import static org.assertj.core.data.Offset.offset;
  * Reproduces the disk-usage difference between the first on-heap vector segment and a subsequent
  * off-heap segment. The first segment has no reusable PQ and therefore uses CassandraOnHeapGraph.
  * It trains a PQ, which SSTableIndexWriter then reuses to build the second segment with CompactionGraph.
+ *
+ * <p>Parameterized over EC (no FusedPQ) and FB (FusedPQ on and off) to exercise both the plain-PQ
+ * and FusedPQ code paths through {@link org.apache.cassandra.index.sai.disk.vector.CassandraOnHeapGraph}
+ * and {@link org.apache.cassandra.index.sai.disk.vector.CompactionGraph}.
  */
-public class VectorSegmentDiskUsageTest extends VectorTester
+public class VectorSegmentDiskUsageTest extends VectorTester.Versioned
 {
     private static final int DIMENSION = 768;
     private static final int ROWS_PER_SEGMENT = 3_000;
     private static final int FIRST_SEGMENT_DISTINCT_VECTORS = 1_024;
+
+    /**
+     * Restricts the {@link VectorTester.Versioned} matrix to the versions and flags relevant here:
+     * <ul>
+     *   <li>EC — predates FusedPQ; exercises the plain-PQ path.</li>
+     *   <li>FB with FusedPQ disabled — same plain-PQ path on the newer format.</li>
+     *   <li>FB with FusedPQ enabled — exercises the FusedPQ inline-codes path.</li>
+     * </ul>
+     * NVQ is always disabled because the test explicitly controls NVQ via {@code SAIUtil.setEnableNVQ(false)}.
+     */
+    @Parameterized.Parameters(name = "version={0} enableNVQ={1} enableFused={2}")
+    public static Collection<Object[]> data()
+    {
+        return VectorTester.Versioned.data()
+                                     .stream()
+                                     .filter(p -> !((boolean) p[1]))                          // NVQ off
+                                     .filter(p -> p[0] == Version.EC || p[0] == Version.FB)   // EC and FB only
+                                     .collect(Collectors.toList());
+    }
 
     @After
     public void resetTestConfiguration()
     {
         SAIUtil.resetCurrentVersion();
         SAIUtil.setEnableNVQ(false);
-//        SAIUtil.setEnableFused(false);
+        SAIUtil.setEnableFused(false);
         SegmentBuilder.updateLastValidSegmentRowId(-1);
         V5VectorPostingsWriter.GLOBAL_HOLES_ALLOWED = 1.0;
     }
@@ -68,11 +93,8 @@ public class VectorSegmentDiskUsageTest extends VectorTester
     @Test
     public void testOnHeapThenOffHeapSegmentDiskUsage()
     {
-        // EC uses V5 postings while keeping full-resolution vectors inline. Disabling NVQ and FusedPQ
-        // isolates the sparse-ordinal effect seen in production.
-        SAIUtil.setCurrentVersion(Version.EC);
-        SAIUtil.setEnableNVQ(false);
-//        SAIUtil.setEnableFused(false);
+        // EC uses V5 postings while keeping full-resolution vectors inline. Disabling NVQ isolates
+        // the sparse-ordinal effect seen in production. FusedPQ is controlled by the parameter.
         V5VectorPostingsWriter.GLOBAL_HOLES_ALLOWED = 0.01;
 
         createTable("CREATE TABLE %s (pk int PRIMARY KEY, v vector<float, " + DIMENSION + ">)");
@@ -132,7 +154,7 @@ public class VectorSegmentDiskUsageTest extends VectorTester
 
         assertThat(onHeap.rows).as("on-heap rows").isEqualTo((long) ROWS_PER_SEGMENT);
         assertThat(offHeap.rows).as("off-heap rows").isEqualTo((long) ROWS_PER_SEGMENT);
-        assertThat(onHeap.rowIdOffset).as("on-heap rowIdOffset").isEqualTo(0L);
+        assertThat(onHeap.rowIdOffset).as("on-heap rowIdOffset").isZero();
         assertThat(offHeap.rowIdOffset).as("off-heap rowIdOffset").isEqualTo((long) ROWS_PER_SEGMENT);
         assertThat(onHeap.graphNodes).as("on-heap graphNodes").isEqualTo(FIRST_SEGMENT_DISTINCT_VECTORS);
         assertThat(offHeap.graphNodes).as("off-heap graphNodes").isEqualTo(FIRST_SEGMENT_DISTINCT_VECTORS);
@@ -145,15 +167,18 @@ public class VectorSegmentDiskUsageTest extends VectorTester
         logMeasurement("segment 2 / off-heap", offHeap);
 
         double termsRatio = (double) offHeap.termsDataBytes / onHeap.termsDataBytes;
+        double pqRatio = (double) offHeap.pqBytes / onHeap.pqBytes;
         double totalRatio = (double) offHeap.totalBytes / onHeap.totalBytes;
-        logger.info("Off-heap/on-heap size ratio: TERMS_DATA={}x, all segment components={}x",
-                    String.format("%.3f", termsRatio), String.format("%.3f", totalRatio));
+        logger.info("Off-heap/on-heap size ratio: TERMS_DATA={}x, PQ={}x, all segment components={}x",
+                    String.format("%.3f", termsRatio), String.format("%.3f", pqRatio), String.format("%.3f", totalRatio));
 
         // After the bug fix both segments hold the same number of distinct vectors and use dense
         // ordinal mapping, so their sizes should be within 20% of each other.
         double tolerance = 0.20;
         assertThat(termsRatio).as("TERMS_DATA size ratio (off-heap / on-heap)")
                               .isCloseTo(1.0, offset(tolerance));
+        assertThat(pqRatio).as("PQ size ratio (off-heap / on-heap)")
+                           .isCloseTo(1.0, offset(tolerance));
         assertThat(totalRatio).as("total segment size ratio (off-heap / on-heap)")
                               .isCloseTo(1.0, offset(tolerance));
     }
